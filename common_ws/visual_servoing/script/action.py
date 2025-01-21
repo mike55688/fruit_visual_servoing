@@ -447,7 +447,7 @@ class Action():
         :param max_iterations: 最大迭代次數
         :param threshold: (這裡僅保留參數，但實際不使用判斷)
         :return: bool, True=完成對準，False=超過最大次數或不符合 TFConfidence
-        """
+        """""""""
 
         Y_MIN = -0.050
         Y_MAX = -0.040
@@ -472,14 +472,6 @@ class Action():
                 f"[refine_alignment] Iter {i+1}, Camera Y = {smoothed_y:.3f}, Error = {error:.3f}"
             )
 
-            # === [原本] 2) 若誤差已小於閾值 => 視為對準完成 ===
-            # 已移除(或註解掉)以下程式碼，以免在 -0.036 等狀況就提早 return True
-            #
-            # if abs(error) < threshold:
-            #     self.cmd_vel.fnStop()
-            #     self.TestAction.get_logger().info("Alignment Complete by threshold")
-            #     return True
-
             # 3) 根據偏差方向決定往前或往後移動
             if error > 0:
                 self.cmd_vel.fnGoBack()
@@ -493,16 +485,16 @@ class Action():
 
             # 5) 停止，等待 3 秒做穩定
             self.cmd_vel.fnStop()
-            self.TestAction.get_logger().info("Stop, waiting 3s to re-check y error...")
+            self.TestAction.get_logger().info("Stop, waiting 5s to re-check y error...")
             time.sleep(3)
 
             # -- 再次檢查 TFConfidence(object_name) (可選) --
-            if not self.TFConfidence(object_name):
-                self.cmd_vel.fnStop()
-                self.TestAction.get_logger().warn(
-                    f"TF Data Not Confident for object '{object_name}' after waiting - Stopping"
-                )
-                return False
+            # if not self.TFConfidence(object_name):
+            #     self.cmd_vel.fnStop()
+            #     self.TestAction.get_logger().warn(
+            #         f"TF Data Not Confident for object '{object_name}' after waiting - Stopping"
+            #     )
+            #     return False
 
             # 6) 再讀取 y
             self.SpinOnce_fork()
@@ -513,13 +505,6 @@ class Action():
                 f"After waiting: Camera Y = {smoothed_y:.3f}, Error = {error:.3f}"
             )
 
-            # === [原本] 7) 再次檢查誤差閾值 ===
-            # 一樣移除或註解，以免提早 return True
-            #
-            # if abs(error) < threshold:
-            #     self.cmd_vel.fnStop()
-            #     self.TestAction.get_logger().info("Alignment Complete (After waiting by threshold)")
-            #     return True
 
             # 8) 檢查是否落入 [-0.050, -0.040] 區間
             if Y_MIN <= smoothed_y <= Y_MAX:
@@ -527,7 +512,7 @@ class Action():
                     f"Current Y={smoothed_y:.3f} in range [{Y_MIN}, {Y_MAX}], checking 10-sample average..."
                 )
                 stable_y_vals = []
-                for _ in range(10):
+                for _ in range(20):
                     self.SpinOnce_fork()
                     self.SpinOnce()
 
@@ -684,12 +669,12 @@ class cmd_vel():
 
     def fnGoStraight_fruit(self):      #控制叉車前進
         twist = Twist()
-        twist.linear.x = 0.05
+        twist.linear.x = 0.03
         self.cmd_pub(twist)
 
     def fnGoBack(self):      #控制叉車前進
         twist = Twist()
-        twist.linear.x = -0.05
+        twist.linear.x = -0.03
         self.cmd_pub(twist)
 
 def main(args=None):
