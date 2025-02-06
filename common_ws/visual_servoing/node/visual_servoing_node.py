@@ -2,12 +2,14 @@
 # third party
 import math # using math.pi
 import tf_transformations # using euler_from_quaternion
+import custom_msgs.msg 
 # message
 from visual_servoing.action import VisualServoing
 from geometry_msgs.msg import PoseArray, Pose, Twist
 from nav_msgs.msg import Odometry
 from forklift_driver.msg import Meteorcar
 from visp_megapose.msg import Confidence
+from custom_msgs.msg import CmdCutPliers  # 引入訊息格式
 
 # ROS2 
 import rclpy
@@ -40,6 +42,8 @@ class VisualServoingActionServer(Node):
         self.create_subscriber()
         self.action_sequence = ActionSequence(self)
         
+        self.arm_control_pub = self.create_publisher(CmdCutPliers, "/cmd_cut_pliers", 10)
+
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
 
     async def execute_callback(self, goal_handle):
@@ -261,7 +265,9 @@ class VisualServoingActionServer(Node):
         self.pallet_confidence_sub = self.create_subscription(Confidence, self.pallet_topic + "_confidence", self.cbPalletConfidence, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
         if(self.shelf_format == True):
             self.shelf_sub = self.create_subscription(PoseArray, self.shelf_topic, self.shelf_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)
-
+    # 訂閱 `/cmd_cut_pliers`
+        self.cut_pliers_sub = self.create_subscription(CmdCutPliers,"/cmd_cut_pliers",self.cmd_cut_pliers_callback,qos_profile=qos_profile_sensor_data,callback_group=self.callback_group)
+    
     def log_info(self):
         rclpy.spin_once(self)
         self.get_logger().info("Odom: x={}, y={}, theta={}".format(
@@ -312,7 +318,7 @@ class VisualServoingActionServer(Node):
             if self.shelf_or_pallet == True:
                 marker_msg = msg.poses[0]
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
+                theta = tf_transformations.euler_from_quaternion(quaternion)[2]
                 self.marker_2d_pose_x = -marker_msg.position.z
                 self.marker_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.marker_2d_theta = -theta
@@ -329,7 +335,7 @@ class VisualServoingActionServer(Node):
             if self.shelf_or_pallet == False:
                 marker_msg = msg
                 quaternion = (marker_msg.orientation.x, marker_msg.orientation.y, marker_msg.orientation.z, marker_msg.orientation.w)
-                theta = tf_transformations.euler_from_quaternion(quaternion)[1]
+                theta = tf_transformations.euler_from_quaternion(quaternion)[2]
                 self.pallet_2d_pose_x = -marker_msg.position.z
                 self.pallet_2d_pose_y = marker_msg.position.x + self.offset_x
                 self.pallet_2d_pose_z = marker_msg.position.y  # 更新z轴信息
@@ -340,6 +346,22 @@ class VisualServoingActionServer(Node):
                 pass
         except:
             pass
+
+
+    def cmd_cut_pliers_callback(self, msg):
+        #self.get_logger().info(f"收到手臂控制訊息: 高度={msg.height1}, 長度={msg.length1}, 爪子狀態={msg.claw1}")
+
+        # 創建新的手臂控制訊息
+        arm_cmd = CmdCutPliers()
+        arm_cmd.height1 = msg.height1   # 設定新的手臂高度
+        arm_cmd.length1 = msg.length1   # 設定新的手臂長度
+        arm_cmd.claw1 = msg.claw1       # 設定爪子開合狀態
+        arm_cmd.enable_motor1 = True    # 啟動手臂的馬達
+
+        # 發布到 `/cmd_cut_pliers` 讓手臂執行動作
+        self.arm_control_pub.publish(arm_cmd)
+        # self.get_logger().info(f"✅ 已發送手臂控制訊息: 高度={arm_cmd.height1}, 長度={arm_cmd.length1}, 爪子={arm_cmd.claw1}")
+
 
     def cbGetforkpos(self, msg):
         # self.get_logger().info("cbGetforkpos")

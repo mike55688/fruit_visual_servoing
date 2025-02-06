@@ -44,6 +44,7 @@ FruitSequence = Enum( 'FruitSequence', \
                         dead_reckoning_x \
                         y_axis_fineturn \
                         move_forward \
+                        packing \
                         end \
                         parking \
                         back \
@@ -291,7 +292,7 @@ class ActionSequence():
             if current_sequence == FruitSequence.dead_reckoning_x.value:
                 # 使用 dead reckoning 基於 y 軸距離移動至目標範圍
                 self.is_sequence_finished = self.action.fnForkFruit_approach_y(y_pose_threshold_min=-0.06,y_pose_threshold_max=-0.04,object_name="bodycamera"  )
-
+                print("here")
                 if self.is_sequence_finished:
                     current_sequence = FruitSequence.move_forward.value  # 切換至下一狀態
                     self.is_sequence_finished = False  # 重置狀態標誌
@@ -308,14 +309,16 @@ class ActionSequence():
 
             elif current_sequence == FruitSequence.move_forward.value:
                 # 關鍵：要接收 refine_alignment() 的回傳值
-                self.is_sequence_finished = self.action.refine_alignment(
-                    object_name="bodycamera",
-                    target_y=-0.046,
-                    max_iterations=20,
-                    threshold=0.005
-                )
+                self.is_sequence_finished = self.action.refine_alignment(object_name="bodycamera",target_y=-0.046,max_iterations=10,threshold=0.005)
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.packing.value  # 切換至下一狀態
+                    self.is_sequence_finished = False  # 重置狀態標誌
 
-                # 如果對準完成 (True) => 結束流程，或切到下一個狀態
+
+            elif current_sequence == FruitSequence.packing.value:
+                # 關鍵：要接收 refine_alignment() 的回傳值
+                self.is_sequence_finished = self.action.fnControlArm(40, 150, False)                # 如果對準完成 (True) => 結束流程，或切到下一個狀態
+
                 if self.is_sequence_finished:
                     self.visual_servoing_action_server.get_logger().info("Process completed successfully.")
                     # 結束整個函式

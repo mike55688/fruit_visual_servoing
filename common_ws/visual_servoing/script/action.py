@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 from geometry_msgs.msg import Twist
 from forklift_driver.msg import Meteorcar
+from custom_msgs.msg import CmdCutPliers  # 引入訊息格式
+
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseArray, Pose
 from rclpy.qos import qos_profile_sensor_data
@@ -68,7 +70,15 @@ class Action():
         self.y_pose_history = []
         self.moving_average_window = 5
         
-        
+        self.arm_control_pub = self.TestAction.create_publisher(CmdCutPliers, "/cmd_cut_pliers", 10)
+
+        self.current_height = 0  # 存儲當前手臂高度
+        self.current_length = 0  # 存儲當前手臂伸長長度
+        # 訂閱來自 STM32 的手臂回饋數據
+        # self.arm_feedback_sub = TestAction.create_subscription(CmdCutPliers,"/cmd_cut_pliers",self.arm_feedback_callback,10)
+
+
+
         self.detectionConfidence = DetectionConfidence(
             pallet_confidence = 0.0,
             pallet_detection = False,
@@ -447,7 +457,7 @@ class Action():
         :param max_iterations: 最大迭代次數
         :param threshold: (這裡僅保留參數，但實際不使用判斷)
         :return: bool, True=完成對準，False=超過最大次數或不符合 TFConfidence
-        """""""""
+        """""""""#111
 
         Y_MIN = -0.050
         Y_MAX = -0.040
@@ -486,7 +496,7 @@ class Action():
             # 5) 停止，等待 3 秒做穩定
             self.cmd_vel.fnStop()
             self.TestAction.get_logger().info("Stop, waiting 5s to re-check y error...")
-            time.sleep(3)
+            time.sleep(2)
 
             # -- 再次檢查 TFConfidence(object_name) (可選) --
             # if not self.TFConfidence(object_name):
@@ -585,6 +595,29 @@ class Action():
                 return False
         return True
     
+#-----------------------------------------------------------------------------------------------------------------
+    def fnControlArm(self, height, length, claw_state):
+        """ 控制機械手臂的高度、長度和爪子開合狀態 """
+        arm_cmd = CmdCutPliers()
+        arm_cmd.height1 = height    # 設定手臂高度
+        arm_cmd.length1 = length    # 設定手臂伸長長度
+        arm_cmd.claw1 = claw_state  # 設定爪子開合狀態
+        arm_cmd.enable_motor1 = True  # 啟動手臂馬達
+
+        # 發布控制訊息
+        self.arm_control_pub.publish(arm_cmd)
+        # self.TestAction.get_logger().info(f"✅ 手臂控制: 高度={height}, 長度={length}, 爪子={claw_state}")
+
+    
+
+    # def arm_feedback_callback(self, msg):
+    #     """ 訂閱來自手臂的狀態回饋，更新當前手臂位置 """
+    #     self.current_height = msg.height1  # 更新手臂高度
+    #     self.current_length = msg.length1  # 更新手臂長度
+    #     self.TestAction.get_logger().info(f"📡 讀取手臂回饋: 高度={self.current_height}, 長度={self.current_length}")
+#-----------------------------------------------------------------------------------------------------------------
+
+
     def is_y_stable(self):
         """
         檢查 y 值是否穩定。使用最近的數值判斷波動是否在允許範圍內。
