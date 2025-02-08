@@ -44,6 +44,11 @@ class VisualServoingActionServer(Node):
         
         self.arm_control_pub = self.create_publisher(CmdCutPliers, "/cmd_cut_pliers", 10)
 
+        # 新增訂閱 arm_current_status
+        self.arm_status_sub = self.create_subscription(CmdCutPliers,"/arm_current_status",self.arm_status_callback,10,callback_group=self.callback_group)
+        # 用於儲存最新的手臂狀態
+        self.current_arm_status = None
+
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
 
     async def execute_callback(self, goal_handle):
@@ -362,6 +367,12 @@ class VisualServoingActionServer(Node):
         self.arm_control_pub.publish(arm_cmd)
         # self.get_logger().info(f"✅ 已發送手臂控制訊息: 高度={arm_cmd.height1}, 長度={arm_cmd.length1}, 爪子={arm_cmd.claw1}")
 
+    def arm_status_callback(self, msg):
+        """
+        當收到 /arm_current_status 的消息時更新內部變數
+        """
+        self.current_arm_status = msg
+        self.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
 
     def cbGetforkpos(self, msg):
         # self.get_logger().info("cbGetforkpos")

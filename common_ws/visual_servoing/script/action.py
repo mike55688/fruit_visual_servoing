@@ -71,13 +71,15 @@ class Action():
         self.moving_average_window = 5
         
         self.arm_control_pub = self.TestAction.create_publisher(CmdCutPliers, "/cmd_cut_pliers", 10)
-
         self.current_height = 0  # 存儲當前手臂高度
         self.current_length = 0  # 存儲當前手臂伸長長度
         # 訂閱來自 STM32 的手臂回饋數據
         # self.arm_feedback_sub = TestAction.create_subscription(CmdCutPliers,"/cmd_cut_pliers",self.arm_feedback_callback,10)
 
-
+        # 新增訂閱 arm_current_status
+        self.arm_status_sub = self.TestAction.create_subscription(CmdCutPliers,"/arm_current_status",self.arm_status_callback,10,callback_group=self.TestAction.callback_group)
+        # 用於儲存最新的手臂狀態
+        self.current_arm_status = None
 
         self.detectionConfidence = DetectionConfidence(
             pallet_confidence = 0.0,
@@ -609,12 +611,28 @@ class Action():
         # self.TestAction.get_logger().info(f"✅ 手臂控制: 高度={height}, 長度={length}, 爪子={claw_state}")
 
     
+    def arm_status_callback(self, msg):
+        """
+        當收到 /arm_current_status 的消息時更新內部變數
+        """
+        self.current_arm_status = msg
+        self.TestAction.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
+        
+    def display_arm_status(self):
+        """
+        顯示當前手臂狀態
 
-    # def arm_feedback_callback(self, msg):
-    #     """ 訂閱來自手臂的狀態回饋，更新當前手臂位置 """
-    #     self.current_height = msg.height1  # 更新手臂高度
-    #     self.current_length = msg.length1  # 更新手臂長度
-    #     self.TestAction.get_logger().info(f"📡 讀取手臂回饋: 高度={self.current_height}, 長度={self.current_length}")
+        此函式會讀取從 /arm_current_status 訂閱到的最新訊息，
+        並使用 TestAction 節點的 logger 印出手臂的高度、伸長長度以及爪子狀態。
+        """
+        if self.current_arm_status is not None:
+            height = self.current_arm_status.height1
+            length = self.current_arm_status.length1
+            claw = self.current_arm_status.claw1
+            self.TestAction.get_logger().info(f"Current arm status -> Height: {height}, Length: {length}, Claw: {claw}")
+        else:
+            self.TestAction.get_logger().info("No arm status received yet.")
+
 #-----------------------------------------------------------------------------------------------------------------
 
 
