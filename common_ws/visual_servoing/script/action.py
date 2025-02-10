@@ -598,19 +598,56 @@ class Action():
         return True
     
 #-----------------------------------------------------------------------------------------------------------------
-    def fnControlArm(self, height, length, claw_state):
-        """ 控制機械手臂的高度、長度和爪子開合狀態 """
+    def fnControlArm(self, height, length, claw_state, timeout=5.0):
+        """
+        控制機械手臂的高度、長度和爪子開合狀態，
+        並持續檢查手臂當前狀態是否已達到指定目標，
+        如果手臂狀態與目標在允許誤差範圍內則返回 True，
+        否則在 timeout 時間內仍未達標則返回 False。
+
+        :param height: 目標高度 (毫米)
+        :param length: 目標伸長長度 (毫米)
+        :param claw_state: 目標爪子狀態 (True 表示閉合, False 表示張開)
+        :param timeout: 等待超時秒數 (預設 5 秒)
+        :return: 如果在 timeout 內手臂狀態與目標在允許誤差內則返回 True，否則返回 False
+        """
+        # 發布控制命令
         arm_cmd = CmdCutPliers()
-        arm_cmd.height1 = height    # 設定手臂高度
-        arm_cmd.length1 = length    # 設定手臂伸長長度
-        arm_cmd.claw1 = claw_state  # 設定爪子開合狀態
+        arm_cmd.height1 = height
+        arm_cmd.length1 = length
+        arm_cmd.claw1 = claw_state
         arm_cmd.enable_motor1 = True  # 啟動手臂馬達
-
-        # 發布控制訊息
         self.arm_control_pub.publish(arm_cmd)
-        # self.TestAction.get_logger().info(f"✅ 手臂控制: 高度={height}, 長度={length}, 爪子={claw_state}")
+        # self.TestAction.get_logger().info(
+        #     f"Published arm command: height={height}, length={length}, claw={claw_state}"
+        # )
 
-    
+        # 持續等待，檢查手臂狀態是否達到目標
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self.current_arm_status is not None:
+                current_height = self.current_arm_status.height1
+                current_length = self.current_arm_status.length1
+                # 假設手臂回傳的 claw 狀態為數值，非 0 表示 True
+                current_claw = bool(self.current_arm_status.claw1)
+                # 打印當前狀態以便調試
+                self.TestAction.get_logger().info(
+                    f"Current arm status: height={current_height}, length={current_length}, claw={current_claw}"
+                )
+                # 使用 abs(current_height) 來處理高度讀數為負值的情況，
+                # 並允許高度與伸長長度在誤差 4 毫米內（不再檢查 claw 狀態）
+                if (abs(abs(current_height) - height) <= 4 and
+                    abs(current_length - length) <= 4):
+                    self.TestAction.get_logger().info("Arm reached target state.")
+                    return True
+            else:
+                self.TestAction.get_logger().warn("尚未接收到手臂狀態訊息。")
+            time.sleep(0.1)  # 每 100ms 檢查一次
+        self.TestAction.get_logger().warn("Timeout waiting for arm to reach target state.")
+        return False
+
+
+        
     def arm_status_callback(self, msg):
         """
         當收到 /arm_current_status 的消息時更新內部變數

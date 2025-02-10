@@ -253,7 +253,7 @@ class ActionSequence():
                     current_sequence = DropPalletSequence.dead_reckoning.value
                     self.is_sequence_finished = False
 
-            elif(current_sequence == DropPalletSequence.dead_reckoning.value):
+            elif(current_sequence == DropPafnControlArmlletSequence.dead_reckoning.value):
                 self.is_sequence_finished = self.action.fnseqMoveToMarkerDist(self.visual_servoing_action_server.drop_pallet_dead_reckoning_dist)
                 
                 if self.is_sequence_finished == True:
@@ -305,10 +305,19 @@ class ActionSequence():
             #         current_sequence = FruitSequence.packing.value  # 切換至下一狀態
             #         self.is_sequence_finished = False  # 重置狀態標誌
 
-
             if current_sequence == FruitSequence.dead_reckoning_x.value:
                 # 關鍵：要接收 refine_alignment() 的回傳值
-                self.is_sequence_finished = self.action.display_arm_status()
+                self.is_sequence_finished = self.action.fnControlArm(40, 0, False, timeout=0.1)
+                print("here")
+
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.packing.value  # 切換至下一狀態
+                    self.is_sequence_finished = False  # 重置狀態標誌
+
+            elif current_sequence == FruitSequence.packing.value:
+                # 關鍵：要接收 refine_alignment() 的回傳值
+                self.is_sequence_finished = self.action.fnControlArm(80, 80, False, timeout=0.1)
+                print("here1")
               # 如果對準完成 (True) => 結束流程，或切到下一個狀態
 
                 if self.is_sequence_finished:
@@ -316,10 +325,7 @@ class ActionSequence():
                     # 結束整個函式
                     return
 
-                # 如果不想直接結束，也可以切到下一個狀態 (範例)
-                # if self.is_sequence_finished:
-                #     current_sequence = FruitSequence.pick_fruit.value
-                #     self.is_sequence_finished = False
+
 
             else:
                 self.visual_servoing_action_server.get_logger().info(

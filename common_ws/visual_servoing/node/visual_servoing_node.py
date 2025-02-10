@@ -372,7 +372,7 @@ class VisualServoingActionServer(Node):
         當收到 /arm_current_status 的消息時更新內部變數
         """
         self.current_arm_status = msg
-        self.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
+        # self.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
 
     def cbGetforkpos(self, msg):
         # self.get_logger().info("cbGetforkpos")
