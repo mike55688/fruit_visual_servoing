@@ -259,6 +259,7 @@ class VisualServoingActionServer(Node):
         self.declare_parameter('shelf_format', True)
         self.shelf_format = self.get_parameter('shelf_format').get_parameter_value().bool_value
         self.get_logger().info("shelf_format: {}, type: {}".format(self.shelf_format, type(self.shelf_format)))
+        self.get_logger().info("1111111111111111111111111111111111111111111111111111")
 
     def create_subscriber(self):
         self.odom_sub = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, qos_profile=qos_profile_sensor_data, callback_group=self.callback_group)

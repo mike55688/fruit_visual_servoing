@@ -1,5 +1,5 @@
 <launch>
-  <node pkg="visual_servoing" exec="visual_servoing_node.py" name="visual_servoing_node" output="screen">
+  <node pkg="visual_servoing" exec="/home/esoc/fruit_ws/install/visual_servoing/lib/visual_servoing/visual_servoing_node.py" output="screen">
 	  <!--subscriber topic parameter setting/-->
     <param name="odom_topic" value="/wheel_odom" /><!--里程計 Topic（map -> base_link, 是tf相對關係, 非輪式里程計）/-->
     <param name="shelf_topic" value="/apriltag_poses" /><!--車體相機對位貨架的 Topic/-->
