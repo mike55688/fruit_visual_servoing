@@ -11,3 +11,4 @@ bool enable_motor4
 int32 target_motor  # 目标马达编号
 int32 motor_value   # 马达目标值
 bool enable_motor   # 启用/禁用马达
+int8 mode  # 0 = 前伸, 1 = 後退

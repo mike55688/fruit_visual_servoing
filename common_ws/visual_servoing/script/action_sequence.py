@@ -38,12 +38,11 @@ DropPalletSequence = Enum( 'DropPalletSequence', \
                         stop \
                         error')
 FruitSequence = Enum( 'FruitSequence', \
-                        'fork_updown \
-                        dead_reckoning \
-                        changing_direction \
-                        dead_reckoning_x \
-                        y_axis_fineturn \
-                        move_forward \
+                        'cut_pliers_rises \
+                        cut_pliers_approach \
+                        cut_pliers_dead_reckoning \
+                        cut_pliers_close \
+                        cut_pliers_backing \
                         packing \
                         end \
                         parking \
@@ -282,7 +281,7 @@ class ActionSequence():
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
                 return
     def fruit_docking(self, goal_handle):  #製作一個用於水果對接的函數
-        current_sequence = FruitSequence.dead_reckoning_x.value
+        current_sequence = FruitSequence.cut_pliers_rises.value
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
@@ -305,34 +304,51 @@ class ActionSequence():
             #         current_sequence = FruitSequence.packing.value  # 切換至下一狀態
             #         self.is_sequence_finished = False  # 重置狀態標誌
 
-            # if current_sequence == FruitSequence.dead_reckoning_x.value:
-            #     # 關鍵：要接收 refine_alignment() 的回傳值
-            #     self.is_sequence_finished = self.action.fnControlArm(40, False, timeout=0.5)
-            #     print("here")
-
-            #     if self.is_sequence_finished:
-            #         current_sequence = FruitSequence.packing.value  # 切換至下一狀態
-            #         self.is_sequence_finished = False  # 重置狀態標誌
-
-
-            # elif current_sequence == FruitSequence.packing.value:
-            #     # 關鍵：要接收 refine_alignment() 的回傳值
-            #     self.is_sequence_finished = self.action.fnControlArmBasedOnFruitX("bodycamera", target_x=-0.250)
-
-            #     if self.is_sequence_finished:
-            #         current_sequence = FruitSequence.move_forward.value  # 切換至下一狀態
-            #         self.is_sequence_finished = False  # 重置狀態標誌
-
-            if current_sequence == FruitSequence.dead_reckoning_x.value:
+            if current_sequence == FruitSequence.cut_pliers_rises.value:
                 # 關鍵：要接收 refine_alignment() 的回傳值
-                self.is_sequence_finished = self.action.fnBlindExtendArm(180)
+                self.is_sequence_finished = self.action.fnControlArm(60, False, timeout=0.5)
                 print("here")
+
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.cut_pliers_approach.value  # 切換至下一狀態
+                    self.is_sequence_finished = False  # 重置狀態標誌
+
+
+            elif current_sequence == FruitSequence.cut_pliers_approach.value:
+                # 關鍵：要接收 refine_alignment() 的回傳值
+                self.is_sequence_finished = self.action.fnControlArmBasedOnFruitX("bodycamera", target_x=-0.13)
+                print("here")
+
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.cut_pliers_dead_reckoning.value  # 切換至下一狀態
+                    self.is_sequence_finished = False  # 重置狀態標誌
+
+            elif current_sequence == FruitSequence.cut_pliers_dead_reckoning.value:
+                # 關鍵：要接收 refine_alignment() 的回傳值
+                self.is_sequence_finished = self.action.fnBlindExtendArm(60)
+                print("here1")
+
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.cut_pliers_close.value  # 切換至下一狀態
+                    self.is_sequence_finished = False  # 重置狀態標誌
+
+            elif current_sequence == FruitSequence.cut_pliers_close.value:
+                # 關鍵：要接收 refine_alignment() 的回傳值
+                self.is_sequence_finished = self.action.fnControlClaw(1)
+                print("here2")
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.cut_pliers_backing.value  # 切換至下一狀態
+
+                    self.is_sequence_finished = False  # 重置狀態標誌
+
+            elif current_sequence == FruitSequence.cut_pliers_backing.value:
+                # 關鍵：要接收 refine_alignment() 的回傳值
+                self.is_sequence_finished = self.action.fnRetractArm(100)
 
                 if self.is_sequence_finished:
                     self.visual_servoing_action_server.get_logger().info("Process completed successfully.")
                     # 結束整個函式
                     return
-
 
 
             # elif current_sequence == FruitSequence.packing.value:

@@ -76,6 +76,8 @@ class Action():
         self.moving_average_window = 5
         
         self.arm_control_pub = self.TestAction.create_publisher(CmdCutPliers, "/cmd_cut_pliers", 2)
+        
+
         self.current_height = 0  # 存儲當前手臂高度
         self.current_length = 0  # 存儲當前手臂伸長長度
         self.estimated_length = 0
@@ -83,7 +85,7 @@ class Action():
         # self.arm_feedback_sub = TestAction.create_subscription(CmdCutPliers,"/cmd_cut_pliers",self.arm_feedback_callback,10)
 
         # 新增訂閱 arm_current_status
-        self.arm_status_sub = self.TestAction.create_subscription(CmdCutPliers,"/arm_current_status",self.arm_status_callback,10,callback_group=self.TestAction.callback_group)
+        self.arm_status_sub = self.TestAction.create_subscription(CmdCutPliers,"/arm_current_status",self.arm_status_callback,2,callback_group=self.TestAction.callback_group)
         # 用於儲存最新的手臂狀態
         self.current_arm_status = None
 
@@ -647,7 +649,7 @@ class Action():
                     return True
             else:
                 self.TestAction.get_logger().warn("尚未接收到手臂狀態訊息。")
-            time.sleep(1)  # 每 100ms 檢查一次
+            # time.sleep(1)  # 每 100ms 檢查一次
         self.TestAction.get_logger().warn("Timeout waiting for arm to reach target state.")
         return False
 
@@ -658,7 +660,7 @@ class Action():
         當收到 /arm_current_status 的消息時更新內部變數
         """
         self.current_arm_status = msg
-        self.TestAction.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
+        # self.TestAction.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
         
 
         
@@ -678,75 +680,75 @@ class Action():
             self.TestAction.get_logger().info("No arm status received yet.")
 
 #-----------------------------------------------------------------------------------------------------------------
-    def fnControlArmBasedOnFruitZ(self, object_name, lower_threshold, upper_threshold, timeout=5.0, increment=8):
-        """
-        根據水果的 z 軸數值來調整手臂高度，僅進行單次調整：
-        - 如果 fruit_2d_pose_z 小於 lower_threshold，則手臂上升 increment 毫米。
-        - 如果 fruit_2d_pose_z 大於 upper_threshold，則手臂下降 increment 毫米。
-        - 如果 fruit_2d_pose_z 在範圍內，則不調整，直接返回 True。
+    # def fnControlArmBasedOnFruitZ(self, object_name, lower_threshold, upper_threshold, timeout=5.0, increment=8):
+    #     """
+    #     根據水果的 z 軸數值來調整手臂高度，僅進行單次調整：
+    #     - 如果 fruit_2d_pose_z 小於 lower_threshold，則手臂上升 increment 毫米。
+    #     - 如果 fruit_2d_pose_z 大於 upper_threshold，則手臂下降 increment 毫米。
+    #     - 如果 fruit_2d_pose_z 在範圍內，則不調整，直接返回 True。
 
-        :param object_name: 目標物名稱 (例如 "apple")
-        :param lower_threshold: 水果 z 軸下界 (例如 0.033)
-        :param upper_threshold: 水果 z 軸上界 (例如 0.039)
-        :param timeout: 等待超時秒數 (預設 5 秒)
-        :param increment: 調整手臂高度的幅度 (毫米)
-        :return: 如果水果 z 值已在目標範圍內或成功發布調整命令則返回 True，否則返回 False
-        """
-        # 先等待直到有手臂狀態資料
-        start_time = time.time()
-        self.SpinOnce()  # 讀取最新狀態
-        # while self.current_arm_status is None and time.time() - start_time < timeout:
-        #     self.TestAction.get_logger().warn("尚未接收到手臂狀態訊息。")
-        #     time.sleep(1.0)
-        # if self.current_arm_status is None:
-        #     self.TestAction.get_logger().warn("Timeout 尚未接收到手臂狀態訊息。")
-        #     return False
+    #     :param object_name: 目標物名稱 (例如 "apple")
+    #     :param lower_threshold: 水果 z 軸下界 (例如 0.033)
+    #     :param upper_threshold: 水果 z 軸上界 (例如 0.039)
+    #     :param timeout: 等待超時秒數 (預設 5 秒)
+    #     :param increment: 調整手臂高度的幅度 (毫米)
+    #     :return: 如果水果 z 值已在目標範圍內或成功發布調整命令則返回 True，否則返回 False
+    #     """
+    #     # 先等待直到有手臂狀態資料
+    #     start_time = time.time()
+    #     self.SpinOnce()  # 讀取最新狀態
+    #     # while self.current_arm_status is None and time.time() - start_time < timeout:
+    #     #     self.TestAction.get_logger().warn("尚未接收到手臂狀態訊息。")
+    #     #     time.sleep(1.0)
+    #     # if self.current_arm_status is None:
+    #     #     self.TestAction.get_logger().warn("Timeout 尚未接收到手臂狀態訊息。")
+    #     #     return False
 
-        # 取得當前手臂資料
-        current_length = self.current_arm_status.length1
-        current_claw = bool(self.current_arm_status.claw1)
-        current_height = self.current_arm_status.height1
+    #     # 取得當前手臂資料
+    #     current_length = self.current_arm_status.length1
+    #     current_claw = bool(self.current_arm_status.claw1)
+    #     current_height = self.current_arm_status.height1
 
 
 
-        # 讀取水果 z 軸資訊（假設存放在 self.pallet_2d_pose_z）
-        self.SpinOnce()
-        fruit_z = self.pallet_2d_pose_z
+    #     # 讀取水果 z 軸資訊（假設存放在 self.pallet_2d_pose_z）
+    #     self.SpinOnce()
+    #     fruit_z = self.pallet_2d_pose_z
 
-        # 取得信心指數，若過低則停止調整
-        confidence = self.TFConfidence(object_name)
-        if confidence is None:
-            self.TestAction.get_logger().warn("無法獲取信心指數，停止手臂調整。")
-            return False
-        if confidence < 0.5:
-            self.TestAction.get_logger().warn(f"信心指數過低 ({confidence:.2f})，停止手臂調整。")
-            return False
+    #     # 取得信心指數，若過低則停止調整
+    #     confidence = self.TFConfidence(object_name)
+    #     if confidence is None:
+    #         self.TestAction.get_logger().warn("無法獲取信心指數，停止手臂調整。")
+    #         return False
+    #     if confidence < 0.5:
+    #         self.TestAction.get_logger().warn(f"信心指數過低 ({confidence:.2f})，停止手臂調整。")
+    #         return False
 
-        self.TestAction.get_logger().info(
-            f"水果 z 值: {fruit_z:.4f}, 信心指數: {confidence:.2f}, 當前手臂高度: {current_height}"
-        )
+    #     self.TestAction.get_logger().info(
+    #         f"水果 z 值: {fruit_z:.4f}, 信心指數: {confidence:.2f}, 當前手臂高度: {current_height}"
+    #     )
 
-        # 若水果 z 值在目標範圍內，則視為達標，不做調整
-        if lower_threshold <= fruit_z <= upper_threshold:
-            self.TestAction.get_logger().info("水果 z 值在目標範圍內，手臂達到目標狀態。")
-            return True
+    #     # 若水果 z 值在目標範圍內，則視為達標，不做調整
+    #     if lower_threshold <= fruit_z <= upper_threshold:
+    #         self.TestAction.get_logger().info("水果 z 值在目標範圍內，手臂達到目標狀態。")
+    #         return True
 
-        # 根據水果 z 值判斷是要上升或下降
-        if fruit_z < lower_threshold:
-            new_height = current_height + abs(increment)
-            self.TestAction.get_logger().info(
-                f"水果 z 值 ({fruit_z:.4f}) 低於下界 ({lower_threshold}), 將手臂高度調整為 {new_height}。"
-            )
-        elif fruit_z > upper_threshold:
-            new_height = current_height - abs(increment)
-            self.TestAction.get_logger().info(
-                f"水果 z 值 ({fruit_z:.4f}) 高於上界 ({upper_threshold}), 將手臂高度調整為 {new_height}。"
-            )
+    #     # 根據水果 z 值判斷是要上升或下降
+    #     if fruit_z < lower_threshold:
+    #         new_height = current_height + abs(increment)
+    #         self.TestAction.get_logger().info(
+    #             f"水果 z 值 ({fruit_z:.4f}) 低於下界 ({lower_threshold}), 將手臂高度調整為 {new_height}。"
+    #         )
+    #     elif fruit_z > upper_threshold:
+    #         new_height = current_height - abs(increment)
+    #         self.TestAction.get_logger().info(
+    #             f"水果 z 值 ({fruit_z:.4f}) 高於上界 ({upper_threshold}), 將手臂高度調整為 {new_height}。"
+    #         )
 
-        # 發布新的手臂控制命令（單次調整）
-        self.fnControlArm(new_height, 0,False)
-        # 調整完後不再循環，僅返回 True（或根據需求返回其他狀態）
-        return True
+    #     # 發布新的手臂控制命令（單次調整）
+    #     self.fnControlArm(new_height, 0,False)
+    #     # 調整完後不再循環，僅返回 True（或根據需求返回其他狀態）
+    #     return True
 
 
     def fnControlArmBasedOnFruitX(self, object_name, target_x, timeout=10.0, increment=10, max_length=440):
@@ -837,16 +839,21 @@ class Action():
         return False
 
 
-
-    def fnBlindExtendArm(self, extra_length, max_length=440, timeout=8.0):
+    def fnBlindExtendArm(self, extra_length, max_length=440, timeout=7.0):
         """
-        盲伸手臂：在當前長度的基礎上，額外前伸 extra_length。
+        盲伸手臂：在當前長度的基礎上，額外前伸 extra_length，並在到達後閉合剪鉗
         
         :param extra_length: 需要額外前伸的距離（單位 mm）
         :param max_length: 最大可伸長度，避免超出限制（預設 440 mm）
         :param timeout: 等待手臂到達目標長度的最大時間（秒）
         :return: True 若手臂成功到達目標，False 若超時或發生錯誤
         """
+
+        # 🔥 **新增變數，確保這個函數不會被重複執行**
+        if hasattr(self, "blind_extend_completed") and self.blind_extend_completed:
+            self.TestAction.get_logger().warn("⚠ `fnBlindExtendArm()` 已執行過，跳過此次呼叫")
+            return False  # 防止再次執行
+
         start_time = time.time()
 
         # 取得當前長度
@@ -855,17 +862,7 @@ class Action():
             self.TestAction.get_logger().error("❌ 無法獲取當前手臂長度，盲伸失敗")
             return False
 
-        # 記錄最後一個有效長度，避免回縮
-        if hasattr(self, "last_valid_length") and current_length < self.last_valid_length:
-            self.TestAction.get_logger().warn(f"⚠ `length1` 變小 ({current_length} mm)，恢復到 {self.last_valid_length} mm")
-            current_length = self.last_valid_length
-
         self.last_valid_length = current_length  # 更新最後一次的有效長度
-
-        # **新增：檢查是否已經執行過盲伸**
-        if hasattr(self, "blind_extend_executed") and self.blind_extend_executed:
-            # self.TestAction.get_logger().warn("⚠ 已執行過盲伸，忽略此次請求")
-            return False
 
         # 設定目標長度
         target_length = min(current_length + extra_length, max_length)
@@ -882,31 +879,120 @@ class Action():
 
         self.arm_control_pub.publish(msg)
 
-        # **標記已執行盲伸**
-        self.blind_extend_executed = True
-
-        # 等待手臂到達目標長度
+        # **等待手臂到達目標長度**
         self.TestAction.get_logger().info(f"⏳ 等待手臂到達長度 {target_length} mm")
         while time.time() - start_time < timeout:
             self.SpinOnce()
             current_length = self.current_arm_status.length1
 
-            # 確保 length1 不會變小
-            if hasattr(self, "last_valid_length") and current_length < self.last_valid_length:
-                self.TestAction.get_logger().warn(f"⚠ `length1` 變小 ({current_length} mm)，恢復到 {self.last_valid_length} mm")
-                current_length = self.last_valid_length
-
             self.last_valid_length = current_length  # 更新最後一次的有效長度
 
             if abs(current_length - target_length) <= 10:  # 允許 10 mm 誤差
                 self.TestAction.get_logger().info(f"✅ 手臂已成功盲伸至 {current_length} mm")
+
+
+                # ✅ **設置變數，防止重複執行**
+                self.blind_extend_completed = True
                 return True
 
-            # self.TestAction.get_logger().warn(f"⏳ 目前長度 {current_length} mm，目標 {target_length} mm，等待中...")
             time.sleep(0.5)
 
-        # self.TestAction.get_logger().error(f"⏰ 盲伸超時: 目標 {target_length} mm 未達成，當前 {current_length} mm")
+        self.TestAction.get_logger().error(f"⏰ 盲伸超時: 目標 {target_length} mm 未達成，當前 {current_length} mm")
         return False
+
+
+
+
+
+
+    def fnControlClaw(self, claw_state, timeout=3):
+        """
+        控制剪鉗的開合 (claw1)，並等待其完成
+        
+        :param claw_state: True = 閉合剪鉗, False = 打開剪鉗
+        :param timeout: 等待剪鉗動作完成的最大時間 (秒)
+        :return: True 若剪鉗成功執行, False 若超時或發生錯誤
+        """
+        start_time = time.time()
+
+        # **確保 claw_state 為 bool**
+        claw_state = bool(claw_state)
+
+        # **發送剪鉗控制指令**
+        msg = CmdCutPliers()
+        msg.height1 = self.current_arm_status.height1  # 保持當前高度
+        msg.length1 = self.current_arm_status.length1  # 保持當前長度
+        msg.claw1 = claw_state  # **確保為 bool**
+        msg.enable_motor1 = True
+        msg.enable_motor2 = True
+
+        self.arm_control_pub.publish(msg)
+        self.TestAction.get_logger().info(f"✂ 剪鉗指令發送: {'閉合' if claw_state else '打開'}")
+
+        # **等待剪鉗狀態變更**
+        while time.time() - start_time < timeout:
+            self.SpinOnce()  # 先處理 ROS 回傳的狀態
+            
+            # **即時檢查剪鉗狀態**
+            if self.current_arm_status.claw1 == claw_state:
+                self.TestAction.get_logger().info(f"✅ 剪鉗 {'閉合' if claw_state else '打開'} 成功")
+                return True  # 立即回傳成功
+            
+            self.TestAction.get_logger().warn(f"⏳ 剪鉗動作中... 目標: {claw_state}, 當前: {self.current_arm_status.claw1}")
+            time.sleep(0.1)  # **減少檢查間隔，加快回應速度**
+
+        self.TestAction.get_logger().error(f"⏰ 剪鉗動作超時: 目標 {claw_state}, 當前 {self.current_arm_status.claw1}")
+        return False  # 如果超時則返回 False
+
+
+
+    def fnRetractArm(self, target_length_1, timeout=5.0):
+        if hasattr(self, "retract_executed") and self.retract_executed:
+            self.TestAction.get_logger().warn("⚠ 已執行過後退，忽略此次請求")
+            return False
+
+        self.TestAction.get_logger().info(f"📢 正在執行 fnRetractArm(), 目標長度: {target_length_1}")
+
+        start_time = time.time()
+        current_length = self.current_arm_status.length1
+
+        if current_length is None:
+            self.TestAction.get_logger().error("❌ 無法獲取當前手臂長度，後退失敗")
+            return False
+
+        if target_length_1 > current_length:
+            self.TestAction.get_logger().warn(f"⚠ 目標長度 {target_length_1} mm 大於當前長度 {current_length} mm，忽略請求")
+            return False
+
+        # ✅ 設定為已執行後退
+        self.retract_executed = True
+
+        # **發送後退訊息**
+        msg = CmdCutPliers()
+        msg.height1 = self.current_arm_status.height1
+        msg.length1 = target_length_1
+        msg.claw1 = self.current_arm_status.claw1
+        msg.enable_motor1 = True
+        msg.enable_motor2 = True
+        msg.mode = 1  # **後退模式**
+        
+        self.arm_control_pub.publish(msg)
+        self.TestAction.get_logger().info(f"🔵 已發送後退指令: {msg}")
+
+        while time.time() - start_time < timeout:
+            self.SpinOnce()
+            current_length = self.current_arm_status.length1
+
+            if abs(current_length - target_length_1) <= 5:
+                self.TestAction.get_logger().info(f"✅ 手臂已成功縮回至 {current_length} mm")
+                return True
+
+            self.TestAction.get_logger().warn(f"⏳ 目前長度 {current_length} mm，目標 {target_length_1} mm，等待中...")
+            time.sleep(0.5)
+
+        self.TestAction.get_logger().error(f"⏰ 手臂後退超時: 目標 {target_length_1} mm 未達成，當前 {current_length} mm")
+        return False
+
 
 #-----------------------------------------------------------
 

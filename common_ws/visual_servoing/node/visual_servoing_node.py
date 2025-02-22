@@ -48,6 +48,7 @@ class VisualServoingActionServer(Node):
         self.arm_status_sub = self.create_subscription(CmdCutPliers,"/arm_current_status",self.arm_status_callback,10,callback_group=self.callback_group)
         # 用於儲存最新的手臂狀態
         self.current_arm_status = None
+        self.last_command = {"height1": -1, "length1": -1, "claw1": False, "mode": -1}
 
         self._action_server = ActionServer(self, VisualServoing, 'VisualServoing', self.execute_callback, callback_group=self.callback_group2)
 
@@ -355,7 +356,32 @@ class VisualServoingActionServer(Node):
 
 
     def cmd_cut_pliers_callback(self, msg):
-        #self.get_logger().info(f"收到手臂控制訊息: 高度={msg.height1}, 長度={msg.length1}, 爪子狀態={msg.claw1}")
+        # **確保 `mode` 參數存在**
+        mode = msg.mode if hasattr(msg, "mode") else 0  # 預設為前伸模式
+
+        # **確保 `current_arm_status` 不為空**
+        if self.current_arm_status is None:
+            self.get_logger().warn("⚠ `current_arm_status` 尚未初始化，忽略此指令")
+            return  
+
+        # **後退模式防止錯誤回彈**
+        if mode == 1:
+            if msg.length1 >= self.current_arm_status.length1:
+                self.get_logger().warn(f"⚠ 後退模式啟動，但目標長度 {msg.length1} 不小於當前長度 {self.current_arm_status.length1}，忽略請求")
+                return  # **忽略錯誤的後退請求**
+
+        # **防止快速來回前進後退**
+        if mode == 0 and msg.length1 < self.last_command["length1"]:
+            self.get_logger().warn(f"⚠ 發現異常：目標長度 {msg.length1} 比上一個命令 {self.last_command['length1']} 更短，但仍為前伸模式，忽略此請求")
+            return
+
+        # **確保只有當數據變化時才發布指令**
+        if (msg.height1 == self.last_command["height1"] and
+            msg.length1 == self.last_command["length1"] and
+            msg.claw1 == self.last_command["claw1"] and
+            mode == self.last_command["mode"]):
+            self.get_logger().info("✅ 指令未變化，避免重複發布")
+            return  # **如果指令相同，則不發布**
 
         # 創建新的手臂控制訊息
         arm_cmd = CmdCutPliers()
@@ -363,17 +389,27 @@ class VisualServoingActionServer(Node):
         arm_cmd.length1 = msg.length1   # 設定新的手臂長度
         arm_cmd.claw1 = msg.claw1       # 設定爪子開合狀態
         arm_cmd.enable_motor1 = True    # 啟動手臂的馬達
+        arm_cmd.mode = mode             # ✅ **確保 mode 被傳遞**
+
+        # **更新 last_command 記錄**
+        self.last_command = {
+            "height1": msg.height1,
+            "length1": msg.length1,
+            "claw1": msg.claw1,
+            "mode": mode
+        }
 
         # 發布到 `/cmd_cut_pliers` 讓手臂執行動作
         self.arm_control_pub.publish(arm_cmd)
-        # self.get_logger().info(f"✅ 已發送手臂控制訊息: 高度={arm_cmd.height1}, 長度={arm_cmd.length1}, 爪子={arm_cmd.claw1}")
+        self.get_logger().info(f"✅ 發送手臂控制指令: 高度={arm_cmd.height1}, 長度={arm_cmd.length1}, 爪子={arm_cmd.claw1}, 模式={arm_cmd.mode}")
 
     def arm_status_callback(self, msg):
         """
         當收到 /arm_current_status 的消息時更新內部變數
         """
-        self.current_arm_status = msg
-        # self.get_logger().info("Received arm status: height1=%d, length1=%d, claw1=%s" %(msg.height1, msg.length1, str(msg.claw1)))
+        if self.current_arm_status is None or msg.length1 != self.current_arm_status.length1:
+            self.current_arm_status = msg
+            # self.get_logger().info(f"✅ 更新手臂狀態: 高度={msg.height1}, 長度={msg.length1}, 爪子={msg.claw1}")
 
     def cbGetforkpos(self, msg):
         # self.get_logger().info("cbGetforkpos")
