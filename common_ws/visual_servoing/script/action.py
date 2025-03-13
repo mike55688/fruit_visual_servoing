@@ -408,7 +408,7 @@ class Action():
             return False
         
 
-    def fnForkFruit_approach_y(self, y_pose_threshold_min, y_pose_threshold_max, object_name):
+    def fnForkFruit_approach_y(self, y_pose_threshold_min=0.000, y_pose_threshold_max=0.016, object_name="bodycamera"):
         """
         基於 y 軸進行粗略逼近，將車輛移動到設定範圍內。
         """
@@ -439,45 +439,21 @@ class Action():
             return False
 
 
-    def stabilize_and_check_y(self, object_name, stabilization_time=3.0):
+    def refine_alignment(self, object_name, target_y=0.007, max_iterations=10, threshold=0.006):
         """
-        停止後等待 y 軸數據穩定，並返回穩定的 y 值。
+        當水果位於相機的左/右（以 y 軸衡量）時，對底盤做小幅微調，並確保數值穩定後才停止。
         """
-        stable_y_values = []
-        start_time = time.time()
+        Y_MIN = -0.002  # 允許的最小值
+        Y_MAX = target_y   # 允許的最大值
 
-        while time.time() - start_time < stabilization_time:
-            self.SpinOnce()
-            smoothed_y = self.compute_moving_average(self.pallet_2d_pose_y)
-            stable_y_values.append(smoothed_y)
-            time.sleep(0.1)  # 每 100ms 更新一次
-
-        final_y = sum(stable_y_values) / len(stable_y_values)
-        self.TestAction.get_logger().info(f"Stable Y Value: {final_y}")
-        return final_y
-
-
-    def refine_alignment(self, object_name, target_y, max_iterations=30, threshold=0.005):
-        """
-        當水果位於相機的左/右（以 y 軸衡量）時，對底盤做小幅微調。
-        同時在每次迭代中檢查 TFConfidence(object_name)，若不可信就停止並返回。
-
-        :param object_name: 給 TFConfidence() 判斷的標的名稱
-        :param target_y: 目標的 y 軸位置
-        :param max_iterations: 最大迭代次數
-        :param threshold: (這裡僅保留參數，但實際不使用判斷)
-        :return: bool, True=完成對準，False=超過最大次數或不符合 TFConfidence
-        """""""""#111
-
-        Y_MIN = -0.050
-        Y_MAX = -0.040
+        stable_y_vals = []  # 儲存穩定性檢查的數值
+        prev_y = None  # 用來追蹤上一個 y 值，確保有更新
+        stable_count = 0  # 計算連續穩定數值的次數
 
         for i in range(max_iterations):
-            # 在每次開始前先更新資料
             self.SpinOnce_fork()
             self.SpinOnce()
 
-            # -- 檢查 TFConfidence(object_name) --
             if not self.TFConfidence(object_name):
                 self.cmd_vel.fnStop()
                 self.TestAction.get_logger().warn(
@@ -485,92 +461,84 @@ class Action():
                 )
                 return False
 
-            # 1) 讀取當前 Y (平滑處理)
             smoothed_y = self.compute_moving_average(self.pallet_2d_pose_y)
             error = smoothed_y - target_y
             self.TestAction.get_logger().info(
-                f"[refine_alignment] Iter {i+1}, Camera Y = {smoothed_y:.3f}, Error = {error:.3f}"
+                f"[refine_alignment] Iter {i+1}, Camera Y = {smoothed_y:.6f}, Error = {error:.6f}"
             )
 
-            # 3) 根據偏差方向決定往前或往後移動
-            if error > 0:
-                self.cmd_vel.fnGoBack()
-                self.TestAction.get_logger().info("Moving Backward to Align")
-            else:
-                self.cmd_vel.fnGoStraight_fruit()
-                self.TestAction.get_logger().info("Moving Forward to Align")
+            # **防止數據未更新，等姿態更新**
+            if prev_y is not None and abs(smoothed_y - prev_y) < 0.00001:  # 降低門檻
+                self.TestAction.get_logger().warn("Pose not updated, waiting for new data...")
+                time.sleep(0.5)
+                continue
 
-            # 4) 移動 0.2 秒 (可自行調整)
-            time.sleep(0.2)
+            prev_y = smoothed_y  # 更新上一個 y 值
 
-            # 5) 停止，等待 3 秒做穩定
-            self.cmd_vel.fnStop()
-            self.TestAction.get_logger().info("Stop, waiting 5s to re-check y error...")
-            time.sleep(2)
-
-            # -- 再次檢查 TFConfidence(object_name) (可選) --
-            # if not self.TFConfidence(object_name):
-            #     self.cmd_vel.fnStop()
-            #     self.TestAction.get_logger().warn(
-            #         f"TF Data Not Confident for object '{object_name}' after waiting - Stopping"
-            #     )
-            #     return False
-
-            # 6) 再讀取 y
-            self.SpinOnce_fork()
-            self.SpinOnce()
-            smoothed_y = self.compute_moving_average(self.pallet_2d_pose_y)
-            error = smoothed_y - target_y
-            self.TestAction.get_logger().info(
-                f"After waiting: Camera Y = {smoothed_y:.3f}, Error = {error:.3f}"
-            )
-
-
-            # 8) 檢查是否落入 [-0.050, -0.040] 區間
+            # **已經在允許範圍內，檢查數值是否穩定**
             if Y_MIN <= smoothed_y <= Y_MAX:
-                self.TestAction.get_logger().info(
-                    f"Current Y={smoothed_y:.3f} in range [{Y_MIN}, {Y_MAX}], checking 10-sample average..."
-                )
-                stable_y_vals = []
-                for _ in range(20):
-                    self.SpinOnce_fork()
-                    self.SpinOnce()
+                self.cmd_vel.fnStop()
+                stable_y_vals.append(smoothed_y)
+                stable_count += 1
 
-                    if not self.TFConfidence(object_name):
-                        self.cmd_vel.fnStop()
-                        self.TestAction.get_logger().warn(
-                            f"TF Data Not Confident for object '{object_name}' in 10-sample check - Stopping"
-                        )
-                        return False
-
-                    val = self.compute_moving_average(self.pallet_2d_pose_y)
-                    stable_y_vals.append(val)
-                    time.sleep(0.1)
-
-                final_avg = sum(stable_y_vals) / len(stable_y_vals)
-                self.TestAction.get_logger().info(f"10-sample average Y: {final_avg:.3f}")
-
-                if Y_MIN <= final_avg <= Y_MAX:
-                    self.cmd_vel.fnStop()
-                    self.TestAction.get_logger().info(
-                        f"Y is stable in [{Y_MIN}, {Y_MAX}], alignment complete!"
-                    )
+                if stable_count >= 2:  # 只要 3 次內有 2 次成功，就判定成功
+                    avg_y = sum(stable_y_vals) / len(stable_y_vals)
+                    self.TestAction.get_logger().info(f"2-sample average Y: {avg_y:.6f}")
+                    self.TestAction.get_logger().info("Y value is stable, alignment complete!")
                     return True
-                else:
-                    self.TestAction.get_logger().info(
-                        f"10-sample average Y not in range [{Y_MIN}, {Y_MAX}] => continue adjusting"
-                    )
 
-        # 超過最大迭代次數
+                self.TestAction.get_logger().info(f"Stable count: {stable_count}/3, continue checking...")
+                time.sleep(0.3)
+                continue  # **確保已經進入範圍內時不再移動**
+
+            # **不在允許範圍內，進行修正**
+            stable_count = 0  # 進入這裡代表數值不穩定，重置計數
+            stable_y_vals.clear()  # 清除累積的數值
+
+            if smoothed_y > Y_MAX:
+                self.cmd_vel.fnGoBack()  # 小幅度後退
+                self.TestAction.get_logger().info("Over threshold, moving backward to correct.")
+            elif smoothed_y < Y_MIN:
+                self.cmd_vel.fnGoStraight_fruit()  # 小幅度前進
+                self.TestAction.get_logger().info("Under threshold, moving forward to correct.")
+
+            # **🚨 每次移動後立即停止，等數據更新**
+            time.sleep(0.5)  # **短暫移動時間**
+            self.cmd_vel.fnStop()
+            self.TestAction.get_logger().info("Stop, waiting for pose update...")
+            time.sleep(1)  # **等數據更新**
+
         self.cmd_vel.fnStop()
         self.TestAction.get_logger().warn("Failed to Align Within Max Iterations")
         return False
 
 
+    def blind_walk_backward(self, duration, speed=-0.2):     #盲走
+        """
+        讓機器人以固定速度向後盲走 `duration` 秒，並在結束後停止，然後返回 True。
+        """
+        self.TestAction.get_logger().info(f"🚀 開始盲走往後 {duration} 秒，速度 {speed} m/s")
+
+        # 確保機器人先停止，避免累積舊指令
+        self.cmd_vel.fnStop()
+        time.sleep(0.1)  # 確保指令生效
+
+        # 設定開始時間
+        start_time = time.time()
+
+        # 在 `duration` 內持續發送後退指令
+        while (time.time() - start_time) < duration and rclpy.ok():
+            self.cmd_vel.fnGoBack2()  # **持續發送後退指令**
+
+        # 結束後停止機器人
+        self.cmd_vel.fnStop()
+
+        return True  # **確保這個函式回傳 True**
 
 
 
-        
+
+
     def fnSeqdecide(self, decide_dist):#decide_dist偏離多少公分要後退
         self.SpinOnce()
         dist = self.marker_2d_pose_y
@@ -680,7 +648,7 @@ class Action():
             self.TestAction.get_logger().info("No arm status received yet.")
 
 #-----------------------------------------------------------------------------------------------------------------
-    def fnControlArmBasedOnFruitZ(self, object_name, lower_z=0.022, upper_z=0.030, timeout=10.0, increment=10, min_height=0, max_height=280, tolerance=4):
+    def fnControlArmBasedOnFruitZ(self, object_name, lower_z=0.022, upper_z=0.028, timeout=10.0, increment=10, min_height=0, max_height=280, tolerance=4):
         """
         根據水果的 Z 軸數值持續調整手臂高度，
         當水果的 Z 值進入允許範圍 (lower_z ~ upper_z) 時，認為已達標停止調整，
@@ -769,7 +737,7 @@ class Action():
                 self.SpinOnce()
                 # 讀取時也將高度轉換為正數進行比較
                 current_height = abs(self.current_arm_status.height1)
-                error = abs(current_height - new_height)
+                error = abs(current_height - new_height) + 1
                 if error <= tolerance:
                     self.TestAction.get_logger().info(
                         f"✅ 手臂調整成功：當前高度 {current_height} mm (目標 {new_height} mm，誤差 {error} mm)"
@@ -1116,12 +1084,17 @@ class cmd_vel():
 
     def fnGoStraight_fruit(self):      #控制叉車前進
         twist = Twist()
-        twist.linear.x = 0.03
+        twist.linear.x = 0.02
         self.cmd_pub(twist)
 
     def fnGoBack(self):      #控制叉車前進
         twist = Twist()
-        twist.linear.x = -0.03
+        twist.linear.x = -0.02
+        self.cmd_pub(twist)
+
+    def fnGoBack2(self):      #控制叉車前進
+        twist = Twist()
+        twist.linear.x = -0.08
         self.cmd_pub(twist)
 
 def main(args=None):

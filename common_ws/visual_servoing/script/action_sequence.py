@@ -39,7 +39,10 @@ DropPalletSequence = Enum( 'DropPalletSequence', \
                         error')
 FruitSequence = Enum( 'FruitSequence', \
                         'cut_pliers_rises \
+                        move_forward_y   \
                         cut_pliers_approach \
+                        dead_reckoning_x \
+                        move_forward \
                         cut_pliers_dead_reckoning \
                         cut_pliers_close \
                         cut_pliers_backing \
@@ -282,38 +285,37 @@ class ActionSequence():
                 self.visual_servoing_action_server.get_logger().info('Error: {0} does not exist'.format(current_sequence))
                 return
     def fruit_docking(self, goal_handle):  #製作一個用於水果對接的函數
-        current_sequence = FruitSequence.cut_pliers_rises.value
+        current_sequence = FruitSequence.move_forward.value
 
         while not goal_handle.is_cancel_requested:
             time.sleep(0.1)
 
 
 
-            # if current_sequence == FruitSequence.dead_reckoning_x.value:
-            #     # 使用 dead reckoning 基於 y 軸距離移動至目標範圍
-            #     self.is_sequence_finished = self.action.fnForkFruit_approach_y(y_pose_threshold_min=-0.06,y_pose_threshold_max=-0.04,object_name="bodycamera"  )
-            #     print("here")
-            #     if self.is_sequence_finished:
-            #         current_sequence = FruitSequence.move_forward.value  # 切換至下一狀態
-            #         self.is_sequence_finished = False  # 重置狀態標誌
+            if current_sequence == FruitSequence.move_forward.value:
+                # 使用 dead reckoning 基於 y 軸距離移動至目標範圍
+                self.is_sequence_finished = self.action.blind_walk_backward(duration=6)             
+                if self.is_sequence_finished:
+                    current_sequence = FruitSequence.move_forward_y.value  # 切換至下一狀態
+                    self.is_sequence_finished = False  # 重置狀態標誌
 
 
-            # elif current_sequence == FruitSequence.move_forward.value:
-            #     # 關鍵：要接收 refine_alignment() 的回傳值
-            #     self.is_sequence_finished = self.action.refine_alignment(object_name="bodycamera",target_y=-0.046,max_iterations=10,threshold=0.005)
-            #     if self.is_sequence_finished:
-            #         current_sequence = FruitSequence.packing.value  # 切換至下一狀態
-            #         self.is_sequence_finished = False  # 重置狀態標誌
-
-
-            if current_sequence == FruitSequence.cut_pliers_rises.value:
+            elif current_sequence == FruitSequence.move_forward_y.value:        
                 # 關鍵：要接收 refine_alignment() 的回傳值
-                self.is_sequence_finished = self.action.fnControlArm(150, False, timeout=0.5)
-                print("here")
-
+                self.is_sequence_finished = self.action.refine_alignment(object_name="bodycamera")                
                 if self.is_sequence_finished:
                     current_sequence = FruitSequence.cut_pliers_up_down.value  # 切換至下一狀態
                     self.is_sequence_finished = False  # 重置狀態標誌
+
+
+            # elif current_sequence == FruitSequence.cut_pliers_rises.value:
+            #     # 關鍵：要接收 refine_alignment() 的回傳值
+            #     self.is_sequence_finished = self.action.fnControlArm(140, False, timeout=0.5)
+            #     print("here")
+
+            #     if self.is_sequence_finished:
+            #         current_sequence = FruitSequence.cut_pliers_up_down.value  # 切換至下一狀態
+            #         self.is_sequence_finished = False  # 重置狀態標誌
 
 
             elif current_sequence == FruitSequence.cut_pliers_up_down.value:
